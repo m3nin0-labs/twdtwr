@@ -21,10 +21,7 @@ devtools::install_github("m3nin0-labs/twdtwr")
 
 ## Usage
 
-The `twdtwr` package simplifies the application of TWDTW analysis to
-pairs of time-series data. The main function provided by the package is
-`twdtw`, which compares two time-series datasets based on their temporal
-dynamics.
+The `twdtwr` package simplifies the application of TWDTW analysis:
 
 ``` r
 library(twdtwr)
