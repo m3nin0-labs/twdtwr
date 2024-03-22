@@ -2,6 +2,6 @@
 # Generator token: 10BE3573-1514-4C36-9D1C-5A225CD40393
 
 twdtw <- function(ts1, ts2, ts1_date, ts2_date, alpha, beta) {
-    .Call('_twdtwr_twdtw', PACKAGE = 'twdtwr', ts1, ts2, ts1_date, ts2_date, alpha, beta)
+    .Call(`_twdtwr_twdtw`, ts1, ts2, ts1_date, ts2_date, alpha, beta)
 }
 

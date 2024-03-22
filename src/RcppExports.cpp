@@ -11,13 +11,13 @@ Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
 // twdtw
-double twdtw(const NumericVector& ts1, const NumericVector& ts2, const DateVector& ts1_date, const DateVector& ts2_date, double alpha, double beta);
+double twdtw(const NumericMatrix& ts1, const NumericMatrix& ts2, const DateVector& ts1_date, const DateVector& ts2_date, double alpha, double beta);
 RcppExport SEXP _twdtwr_twdtw(SEXP ts1SEXP, SEXP ts2SEXP, SEXP ts1_dateSEXP, SEXP ts2_dateSEXP, SEXP alphaSEXP, SEXP betaSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< const NumericVector& >::type ts1(ts1SEXP);
-    Rcpp::traits::input_parameter< const NumericVector& >::type ts2(ts2SEXP);
+    Rcpp::traits::input_parameter< const NumericMatrix& >::type ts1(ts1SEXP);
+    Rcpp::traits::input_parameter< const NumericMatrix& >::type ts2(ts2SEXP);
     Rcpp::traits::input_parameter< const DateVector& >::type ts1_date(ts1_dateSEXP);
     Rcpp::traits::input_parameter< const DateVector& >::type ts2_date(ts2_dateSEXP);
     Rcpp::traits::input_parameter< double >::type alpha(alphaSEXP);

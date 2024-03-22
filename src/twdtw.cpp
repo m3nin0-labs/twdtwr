@@ -2,6 +2,31 @@
 
 using namespace Rcpp;
 
+
+/**
+ * Convert `NumericMatrix` to 2D `std::vector`.
+ * 
+ * @description
+ * This function converts a `NumericMatrix` into a 2D `std::vector`.
+ *
+ * @param mat A `NumericMatrix` with single or multi variate time-series.
+ */
+std::vector<std::vector<double>> to_cpp_vector(NumericMatrix mat) {
+  size_t rows = mat.nrow();
+  size_t cols = mat.ncol();
+  
+  std::vector<std::vector<double>> result(rows, std::vector<double>(cols));
+  
+  for(size_t i = 0; i < rows; ++i) {
+    for(size_t j = 0; j < cols; ++j) {
+      result[i][j] = mat(i, j);
+    }
+  }
+  
+  return result;
+}
+
+
 /**
  * Calculate the absolute difference between two `DateVector`.
  * 
@@ -188,23 +213,19 @@ double distance_dtw_op(std::vector<std::vector<double>> a,
  */
 // [[Rcpp::export]]
 double twdtw(
-    const NumericVector& ts1, 
-    const NumericVector& ts2, 
-    const DateVector& ts1_date, 
-    const DateVector& ts2_date, 
-    double alpha, 
+    const NumericMatrix& ts1,
+    const NumericMatrix& ts2,
+    const DateVector& ts1_date,
+    const DateVector& ts2_date,
+    double alpha,
     double beta
 )
 {
-  // const DateVector& ts1_dates, DateVector& ts2_dates,
-  std::vector<double> ts1_data(ts1.begin(), ts1.end());
-  std::vector<double> ts2_data(ts2.begin(), ts2.end());
+  std::vector<std::vector<double>> ts1_vec = to_cpp_vector(ts1);
+  std::vector<std::vector<double>> ts2_vec = to_cpp_vector(ts2);
 
-  std::vector<std::vector<double>> ts1_vec = {ts1_data};
-  std::vector<std::vector<double>> ts2_vec = {ts2_data};
-  
   NumericVector time_diff = calculate_dates_difference(ts1_date, ts2_date);
   std::vector<double> time_weight = calculate_time_weight(time_diff, alpha, beta);
-  
+
   return (distance_dtw_op(ts1_vec, ts2_vec, time_weight));
 }
