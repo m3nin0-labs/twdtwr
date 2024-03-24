@@ -1,46 +1,45 @@
-#include <Rcpp.h>
+#include <RcppArmadillo.h>
+// [[Rcpp::depends(RcppArmadillo)]]
+
+#include <map>
+#include <string>
 
 using namespace Rcpp;
 
-
-/**
- * Convert `NumericMatrix` to 2D `std::vector`.
- * 
- * @description
- * This function converts a `NumericMatrix` into a 2D `std::vector`.
- *
- * @param mat A `NumericMatrix` with single or multi variate time-series.
- */
-std::vector<std::vector<double>> to_cpp_vector(NumericMatrix mat) {
-  size_t rows = mat.nrow();
-  size_t cols = mat.ncol();
+// [[Rcpp::export]]
+int max_cycle_length(std::string cycle_length, std::string time_scale) {
+  // Define the units in larger using nested std::map
+  std::map<std::string, std::map<std::string, int>> units_in_larger = {
+    {"year", {
+      {"month", 12}, {"day", 366}, {"hour", 24 * 366}, {"minute", 60 * 24 * 366}, {"second", 60 * 60 * 24 * 366}
+    }},
+    {"month", {
+      {"day", 31}, {"hour", 24 * 31}, {"minute", 60 * 24 * 31}, {"second", 60 * 60 * 24 * 31}
+    }},
+    {"day", {
+      {"hour", 24}, {"minute", 24 * 60}, {"second", 24 * 60 * 60}
+    }},
+    {"hour", {
+      {"minute", 60}, {"second", 60 * 60}
+    }},
+    {"minute", {
+      {"second", 60}
+    }}
+  };
   
-  std::vector<std::vector<double>> result(rows, std::vector<double>(cols));
-  
-  for(size_t i = 0; i < rows; ++i) {
-    for(size_t j = 0; j < cols; ++j) {
-      result[i][j] = mat(i, j);
-    }
+  // Check if the cycle_length is valid
+  if (units_in_larger.find(cycle_length) == units_in_larger.end()) {
+    Rcpp::stop("Invalid cycle_length");
   }
   
-  return result;
+  // Check if the time_scale is valid for the provided cycle_length
+  if (units_in_larger[cycle_length].find(time_scale) == units_in_larger[cycle_length].end()) {
+    Rcpp::stop("Invalid time_scale for the provided cycle_length");
+  }
+  
+  // Get the max_value
+  return units_in_larger[cycle_length][time_scale];
 }
-
-
-/**
- * Calculate the absolute difference between two `DateVector`.
- * 
- * @description
- * This function calculates the Dynamic Time Warping (DTW) distance between
- * two time-series.
- *
- * @param date_vec_a A `DateVector` with dates.
- * @param date_vec_b A `DateVector` with dates.
- */
-NumericVector calculate_dates_difference(DateVector date_vec_a, DateVector date_vec_b) {
-  return abs(date_vec_a - date_vec_b);
-}
-
 
 /**
  * Calculate time weight (logistic model)
@@ -60,124 +59,130 @@ NumericVector calculate_dates_difference(DateVector date_vec_a, DateVector date_
  * Journal of Selected Topics in Applied Earth Observations and Remote Sensing 
  * 9 (8): 3729–39. https://doi.org/10.1109/JSTARS.2016.2517118.
  */
-std::vector<double> calculate_time_weight(NumericVector date_diff, double alpha, double beta) {
-  std::vector<double> time_weights;
-  
-  for (size_t i = 0; i < date_diff.size(); i++) {
-    time_weights.push_back(
-      (1 / (1 + std::exp(-alpha * (date_diff[i] - beta) )))
-    );
-  };
-  
-  return time_weights;
+double calculate_time_weight(int cycle_len, double alpha, double beta) {
+  return (1 / (1 + std::exp(-alpha * (cycle_len - beta) )));
 }
 
-
 /**
- * Compute the time-weighted DTW distance between two time-series.
+ * Minimum of 2 values.
  *
  * @description
- * The `p-norm`, also known as the `Minkowski space`, is a generalized norm
- * calculation that includes several types of distances based on the value
- * of `p`.
- *
- * Common values of `p` include:
- *
- *  - `p = 1` for the Manhattan (city block) distance;
- *  - `p = 2` for the Euclidean norm (distance).
- *
- * More details about p-norms can be found on Wikipedia:
- * https://en.wikipedia.org/wiki/Norm_(mathematics)#p-norm
- *
- * @param a A `std::vector<double>` with time-series values.
- * @param b A `std::vector<double>` with time-series values.
- * @param b A `std::vector<double>` with weight values for each time-series point.
- *
- * @note
- * Both vectors `a` and `b` must have the same length.
- *
- * @note
- * The implementation of this DTW distance calculation was adapted from the
- * `DTW_cpp` single header library (https://github.com/cjekel/DTW_cpp).
- *
- * @return The `p-norm` value between vectors `a` and `b`.
+ * Auxiliary function to calculate the minimum value of `x` and `y`.
  */
-double p_norm(std::vector<double> a, std::vector<double> b, std::vector<double> time_weight)
+double minval(double x, double y)
 {
-  double d = 0;
-  
-  size_t index;
-  size_t a_size = a.size();
-  
-  for (index = 0; index < a_size; index++)
-  {
-    d += std::pow(std::abs(a[index] - b[index]), 2) + time_weight[index];
+  // z > nan for z != nan is required by C the standard
+  int xnan = std::isnan(x), ynan = std::isnan(y);
+  if(xnan || ynan) {
+    if(xnan && !ynan) return y;
+    if(!xnan && ynan) return x;
+    return x;
   }
-  
-  return std::pow(d, 1.0 / 2);
+  return std::min(x,y);
 }
 
 
 /**
- * Time-Weighted Dynamic Time Warping (TWDTW) distance.
+ * Calculate the `symmetric2` step pattern.
  *
  * @description
- * This function calculates the Time-Weighted Dynamic Time Warping (TWDTW) 
- * distance between two time-series.
+ * This function calculates the `symmetric2` step pattern, which uses a weight
+ * of 2 for the diagonal step and 1 for the vertical and horizontal to
+ * compensate for the favor of diagonal steps.
  *
- * @param x A `std::vector<std::vector<double>>` with time-series values.
- * @param y A `std::vector<std::vector<double>>` with time-series values.
+ * @note
+ * For more information on this step pattern, visit the `IncDTW` package
+ * documentation: https://www.rdocumentation.org/packages/IncDTW/versions/1.1.4.4/topics/dtw2vec
  *
  * @reference
+ * Leodolter, M., Plant, C., & Brändle, N. (2021). IncDTW: An R Package for
+ * Incremental Calculation of Dynamic Time Warping. Journal of Statistical
+ * Software, 99(9), 1–23. https://doi.org/10.18637/jss.v099.i09
+ *
  * Giorgino, T. (2009). Computing and Visualizing Dynamic Time Warping
  * Alignments in R: The dtw Package. Journal of Statistical Software, 31(7),
  * 1–24. https://doi.org/10.18637/jss.v031.i07
- * 
- * Maus, Victor, Gilberto Camara, Ricardo Cartaxo, Alber Sanchez, 
- * Fernando M. Ramos, and Gilberto R. de Queiroz. 2016. “A Time-Weighted 
- * Dynamic Time Warping Method for Land-Use and Land-Cover Mapping.” IEEE 
- * Journal of Selected Topics in Applied Earth Observations and Remote Sensing 
- * 9 (8): 3729–39. https://doi.org/10.1109/JSTARS.2016.2517118.
+ *
+ * @return `symmetric2` step pattern value.
+ */
+double calculate_step_pattern_symmetric2(
+    const double gcm10, // vertical
+    const double gcm11, // diagonal
+    const double gcm01, // horizontal
+    const double cm00
+) {
+  return(cm00 + minval(gcm10, minval(cm00 + gcm11, gcm01)));
+}
+
+
+/**
+ * Vector-based Dynamic Time Warping (DTW) distance.
+ *
+ * @description
+ * This function calculates the Dynamic Time Warping (DTW) distance between
+ * two sequences using the vector-based algorithm proposed by Leodolter
+ * et al. (2021).
+ *
+ * The complexity of this function, as presented by Leodolter et al. (2021), is
+ * equal to O(n).
+ *
+ * For more information on vector-based DTW, visit:
+ * https://doi.org/10.18637/jss.v099.i09
+ *
+ * @param x A `arma::vec` with time-series values.
+ * @param y A `arma::vec` with time-series values.
+ *
+ * @reference
+ * Leodolter, M., Plant, C., & Brändle, N. (2021). IncDTW: An R Package for
+ * Incremental Calculation of Dynamic Time Warping. Journal of Statistical
+ * Software, 99(9), 1–23. https://doi.org/10.18637/jss.v099.i09
  *
  * @note
  * The implementation of this DTW distance calculation was adapted from the
- * `DTW_cpp` single header library (https://github.com/cjekel/DTW_cpp).
+ * `IncDTW` R package.
  *
  * @return DTW distance.
  */
-double distance_dtw_op(std::vector<std::vector<double>> a,
-                       std::vector<std::vector<double>> b,
-                       std::vector<double> time_weight)
+// [[Rcpp::export]]
+double dtw2vec(const arma::vec &x, const arma::vec &y, double time_weight)
 {
-  int n = a.size();
-  int o = b.size();
+  int nx = x.size();
+  int ny = y.size();
   
-  std::vector<std::vector<double>> d(n, std::vector<double>(o, 0.0));
+  double *p1 = new double[nx];
+  double *p2 = new double[nx];
   
-  d[0][0] = p_norm(a[0], b[0], time_weight);
+  double *ptmp;
+  double ret;
   
-  for (int i = 1; i < n; i++)
+  // first column
+  *p1 = std::abs(x[0] - y[0]);
+  for (int i = 1; i < nx; i++)
   {
-    d[i][0] = d[i - 1][0] + p_norm(a[i], b[0], time_weight);
+    p1[i] = std::abs(x[i] - y[0]) + p1[i - 1] + time_weight;
   }
   
-  for (int i = 1; i < o; i++)
+  for (int j = 1; j < ny; j++)
   {
-    d[0][i] = d[0][i - 1] + p_norm(a[0], b[i], time_weight);
-  }
-  
-  for (int i = 1; i < n; i++)
-  {
-    for (int j = 1; j < o; j++)
+    *p2 = std::abs(x[0] - y[j]) + *(p1);
+    
+    for (int i = 1; i < nx; i++)
     {
-      d[i][j] = p_norm(a[i], b[j], time_weight) + std::fmin(
-        std::fmin(d[i - 1][j], d[i][j - 1]), d[i - 1][j - 1]
-      );
+      *(p2 + i) = calculate_step_pattern_symmetric2(*(p2 + i - 1), *(p1 + i - 1), *(p1 + i), std::abs(x[i] - y[j])) + time_weight;
     }
+    ptmp = p1;
+    p1 = p2;
+    p2 = ptmp;
   }
   
-  return d[n - 1][o - 1];
+  ret = *(p1 + nx - 1); // p1[nx-1]
+  
+  delete[] p1;
+  delete[] p2;
+  
+  return (ret);
 }
+
 
 /**
  * Dynamic Time Warping (DTW) distance.
@@ -213,19 +218,16 @@ double distance_dtw_op(std::vector<std::vector<double>> a,
  */
 // [[Rcpp::export]]
 double twdtw(
-    const NumericMatrix& ts1,
-    const NumericMatrix& ts2,
-    const DateVector& ts1_date,
-    const DateVector& ts2_date,
+    const arma::vec &x, 
+    const arma::vec &y,
+    const std::string& cycle_length, 
+    const std::string& time_scale,
     double alpha,
     double beta
 )
 {
-  std::vector<std::vector<double>> ts1_vec = to_cpp_vector(ts1);
-  std::vector<std::vector<double>> ts2_vec = to_cpp_vector(ts2);
+  int cycle_length_value = max_cycle_length(cycle_length, time_scale);
+  double time_weight = calculate_time_weight(cycle_length_value, alpha, beta);
 
-  NumericVector time_diff = calculate_dates_difference(ts1_date, ts2_date);
-  std::vector<double> time_weight = calculate_time_weight(time_diff, alpha, beta);
-
-  return (distance_dtw_op(ts1_vec, ts2_vec, time_weight));
+  return (dtw2vec(x, y, time_weight));
 }
