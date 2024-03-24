@@ -10,25 +10,40 @@ Rcpp::Rostream<true>&  Rcpp::Rcout = Rcpp::Rcpp_cout_get();
 Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
+// max_cycle_length
+double max_cycle_length(std::string cycle_length, std::string time_scale);
+RcppExport SEXP _twdtwr_max_cycle_length(SEXP cycle_lengthSEXP, SEXP time_scaleSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< std::string >::type cycle_length(cycle_lengthSEXP);
+    Rcpp::traits::input_parameter< std::string >::type time_scale(time_scaleSEXP);
+    rcpp_result_gen = Rcpp::wrap(max_cycle_length(cycle_length, time_scale));
+    return rcpp_result_gen;
+END_RCPP
+}
 // twdtw
-double twdtw(const NumericMatrix& ts1, const NumericMatrix& ts2, const DateVector& ts1_date, const DateVector& ts2_date, double alpha, double beta);
-RcppExport SEXP _twdtwr_twdtw(SEXP ts1SEXP, SEXP ts2SEXP, SEXP ts1_dateSEXP, SEXP ts2_dateSEXP, SEXP alphaSEXP, SEXP betaSEXP) {
+double twdtw(const NumericMatrix& ts1, const NumericMatrix& ts2, const NumericVector& ts1_dates, const NumericVector& ts2_dates, const std::string& cycle_length, const std::string& time_scale, double alpha, double beta);
+RcppExport SEXP _twdtwr_twdtw(SEXP ts1SEXP, SEXP ts2SEXP, SEXP ts1_datesSEXP, SEXP ts2_datesSEXP, SEXP cycle_lengthSEXP, SEXP time_scaleSEXP, SEXP alphaSEXP, SEXP betaSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< const NumericMatrix& >::type ts1(ts1SEXP);
     Rcpp::traits::input_parameter< const NumericMatrix& >::type ts2(ts2SEXP);
-    Rcpp::traits::input_parameter< const DateVector& >::type ts1_date(ts1_dateSEXP);
-    Rcpp::traits::input_parameter< const DateVector& >::type ts2_date(ts2_dateSEXP);
+    Rcpp::traits::input_parameter< const NumericVector& >::type ts1_dates(ts1_datesSEXP);
+    Rcpp::traits::input_parameter< const NumericVector& >::type ts2_dates(ts2_datesSEXP);
+    Rcpp::traits::input_parameter< const std::string& >::type cycle_length(cycle_lengthSEXP);
+    Rcpp::traits::input_parameter< const std::string& >::type time_scale(time_scaleSEXP);
     Rcpp::traits::input_parameter< double >::type alpha(alphaSEXP);
     Rcpp::traits::input_parameter< double >::type beta(betaSEXP);
-    rcpp_result_gen = Rcpp::wrap(twdtw(ts1, ts2, ts1_date, ts2_date, alpha, beta));
+    rcpp_result_gen = Rcpp::wrap(twdtw(ts1, ts2, ts1_dates, ts2_dates, cycle_length, time_scale, alpha, beta));
     return rcpp_result_gen;
 END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
-    {"_twdtwr_twdtw", (DL_FUNC) &_twdtwr_twdtw, 6},
+    {"_twdtwr_max_cycle_length", (DL_FUNC) &_twdtwr_max_cycle_length, 2},
+    {"_twdtwr_twdtw", (DL_FUNC) &_twdtwr_twdtw, 8},
     {NULL, NULL, 0}
 };
 
