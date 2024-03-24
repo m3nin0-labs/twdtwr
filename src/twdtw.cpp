@@ -1,7 +1,43 @@
 #include <Rcpp.h>
+#include <map>
+#include <string>
 
 using namespace Rcpp;
 
+// [[Rcpp::export]]
+double max_cycle_length(std::string cycle_length, std::string time_scale) {
+  // Define the units in larger using nested std::map
+  std::map<std::string, std::map<std::string, int>> units_in_larger = {
+    {"year", {
+      {"month", 12}, {"day", 366}, {"hour", 24 * 366}, {"minute", 60 * 24 * 366}, {"second", 60 * 60 * 24 * 366}
+    }},
+    {"month", {
+      {"day", 31}, {"hour", 24 * 31}, {"minute", 60 * 24 * 31}, {"second", 60 * 60 * 24 * 31}
+    }},
+    {"day", {
+      {"hour", 24}, {"minute", 24 * 60}, {"second", 24 * 60 * 60}
+    }},
+    {"hour", {
+      {"minute", 60}, {"second", 60 * 60}
+    }},
+    {"minute", {
+      {"second", 60}
+    }}
+  };
+  
+  // Check if the cycle_length is valid
+  if (units_in_larger.find(cycle_length) == units_in_larger.end()) {
+    Rcpp::stop("Invalid cycle_length");
+  }
+  
+  // Check if the time_scale is valid for the provided cycle_length
+  if (units_in_larger[cycle_length].find(time_scale) == units_in_larger[cycle_length].end()) {
+    Rcpp::stop("Invalid time_scale for the provided cycle_length");
+  }
+  
+  // Get the max_value
+  return units_in_larger[cycle_length][time_scale];
+}
 
 /**
  * Convert `NumericMatrix` to 2D `std::vector`.
@@ -26,22 +62,6 @@ std::vector<std::vector<double>> to_cpp_vector(NumericMatrix mat) {
   return result;
 }
 
-
-/**
- * Calculate the absolute difference between two `DateVector`.
- * 
- * @description
- * This function calculates the Dynamic Time Warping (DTW) distance between
- * two time-series.
- *
- * @param date_vec_a A `DateVector` with dates.
- * @param date_vec_b A `DateVector` with dates.
- */
-NumericVector calculate_dates_difference(DateVector date_vec_a, DateVector date_vec_b) {
-  return abs(date_vec_a - date_vec_b);
-}
-
-
 /**
  * Calculate time weight (logistic model)
  * 
@@ -60,16 +80,16 @@ NumericVector calculate_dates_difference(DateVector date_vec_a, DateVector date_
  * Journal of Selected Topics in Applied Earth Observations and Remote Sensing 
  * 9 (8): 3729–39. https://doi.org/10.1109/JSTARS.2016.2517118.
  */
-std::vector<double> calculate_time_weight(NumericVector date_diff, double alpha, double beta) {
-  std::vector<double> time_weights;
-  
-  for (size_t i = 0; i < date_diff.size(); i++) {
-    time_weights.push_back(
-      (1 / (1 + std::exp(-alpha * (date_diff[i] - beta) )))
-    );
-  };
-  
-  return time_weights;
+// double calculate_time_weight(int cycle_len, double alpha, double beta) {
+double calculate_time_weight(int time_index, double alpha, double beta, std::string cycle_length, std::string time_scale, const NumericVector& ts1_dates,
+                             const NumericVector& ts2_dates) {
+  // double max_scale = max_cycle_length(cycle_length, time_scale);
+
+  // double date_diff = std::fabs(ts2_dates[time_index] - ts1_dates[time_index]);
+  // double time_weight = std::min(date_diff, max_scale);
+  double time_weight = std::fabs(ts2_dates[time_index] - ts1_dates[time_index]);
+
+  return (1 / (1 + std::exp(-alpha * (time_weight - beta) )));
 }
 
 
@@ -102,7 +122,7 @@ std::vector<double> calculate_time_weight(NumericVector date_diff, double alpha,
  *
  * @return The `p-norm` value between vectors `a` and `b`.
  */
-double p_norm(std::vector<double> a, std::vector<double> b, std::vector<double> time_weight)
+double p_norm(std::vector<double> a, std::vector<double> b)
 {
   double d = 0;
   
@@ -111,7 +131,7 @@ double p_norm(std::vector<double> a, std::vector<double> b, std::vector<double> 
   
   for (index = 0; index < a_size; index++)
   {
-    d += std::pow(std::abs(a[index] - b[index]), 2) + time_weight[index];
+    d += std::pow(std::abs(a[index] - b[index]), 2);
   }
   
   return std::pow(d, 1.0 / 2);
@@ -147,32 +167,39 @@ double p_norm(std::vector<double> a, std::vector<double> b, std::vector<double> 
  */
 double distance_dtw_op(std::vector<std::vector<double>> a,
                        std::vector<std::vector<double>> b,
-                       std::vector<double> time_weight)
+                       const NumericVector& ts1_dates,
+                       const NumericVector& ts2_dates,
+                       double alpha,
+                       double beta,
+                       const std::string cycle_length, 
+                       const std::string time_scale)
 {
   int n = a.size();
   int o = b.size();
   
   std::vector<std::vector<double>> d(n, std::vector<double>(o, 0.0));
   
-  d[0][0] = p_norm(a[0], b[0], time_weight);
+  d[0][0] = p_norm(a[0], b[0]);
   
   for (int i = 1; i < n; i++)
   {
-    d[i][0] = d[i - 1][0] + p_norm(a[i], b[0], time_weight);
+    d[i][0] = d[i - 1][0] + p_norm(a[i], b[0]) + calculate_time_weight(0, alpha, beta, cycle_length, time_scale, ts1_dates, ts2_dates);
   }
   
   for (int i = 1; i < o; i++)
   {
-    d[0][i] = d[0][i - 1] + p_norm(a[0], b[i], time_weight);
+    d[0][i] = d[0][i - 1] + p_norm(a[0], b[i]) + calculate_time_weight(0, alpha, beta, cycle_length, time_scale, ts1_dates, ts2_dates);
   }
   
   for (int i = 1; i < n; i++)
   {
     for (int j = 1; j < o; j++)
     {
-      d[i][j] = p_norm(a[i], b[j], time_weight) + std::fmin(
+      d[i][j] = p_norm(a[i], b[j]) + std::fmin(
         std::fmin(d[i - 1][j], d[i][j - 1]), d[i - 1][j - 1]
       );
+      
+      d[i][j] = d[i][j] + calculate_time_weight(j, alpha, beta, cycle_length, time_scale, ts1_dates, ts2_dates);
     }
   }
   
@@ -215,8 +242,10 @@ double distance_dtw_op(std::vector<std::vector<double>> a,
 double twdtw(
     const NumericMatrix& ts1,
     const NumericMatrix& ts2,
-    const DateVector& ts1_date,
-    const DateVector& ts2_date,
+    const NumericVector& ts1_dates,
+    const NumericVector& ts2_dates,
+    const std::string& cycle_length, 
+    const std::string& time_scale,
     double alpha,
     double beta
 )
@@ -224,8 +253,8 @@ double twdtw(
   std::vector<std::vector<double>> ts1_vec = to_cpp_vector(ts1);
   std::vector<std::vector<double>> ts2_vec = to_cpp_vector(ts2);
 
-  NumericVector time_diff = calculate_dates_difference(ts1_date, ts2_date);
-  std::vector<double> time_weight = calculate_time_weight(time_diff, alpha, beta);
+  // int cycle_length_value = max_cycle_length(cycle_length, time_scale);
+  // double time_weight = calculate_time_weight(cycle_length_value, alpha, beta);
 
-  return (distance_dtw_op(ts1_vec, ts2_vec, time_weight));
+  return (distance_dtw_op(ts1_vec, ts2_vec, ts1_dates, ts2_dates, alpha, beta, cycle_length, time_scale));
 }
